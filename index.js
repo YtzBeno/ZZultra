@@ -15,9 +15,7 @@ const db = new Pool({
 });
 
 // EVM provider for Sepolia
-const sepoliaProvider = new ethers.providers.JsonRpcProvider(
-  process.env.SEPOLIA_RPC_URL
-);
+const sepoliaProvider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
 
 // Solana devnet connection
 const solConnection = new Connection(process.env.SOLANA_DEVNET_URL);
