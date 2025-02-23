@@ -12,6 +12,9 @@ app.use(express.json());
 // Postgres pool
 const db = new Pool({
   connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false,
+  },
 });
 
 // EVM provider for Sepolia
