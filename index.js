@@ -108,8 +108,12 @@ app.listen(PORT, () => {
  **************************************/
 
 // POST /api/pools => create a new pool
+// index.js (or wherever you define your pool routes)
+
+// ...
 app.post("/api/pools", async (req, res) => {
   try {
+    // 1) Destructure all fields, including optional `pool_token_account`
     const {
       pool_name,
       pool_image_gif,
@@ -127,15 +131,19 @@ app.post("/api/pools", async (req, res) => {
       pool_telegram,
       pool_x,
       contract_address,
+      // NEW optional field:
+      pool_token_account,
     } = req.body;
 
-    // Minimal check
+    // 2) Minimal check
     if (!pool_name || !chain) {
       return res
         .status(400)
         .json({ error: "Missing required fields (pool_name, chain)." });
     }
 
+    // 3) Insert query: includes "pool_token_account"
+    // We append it as the 17th column. Make sure your "pools" table has this column.
     const insertPoolQuery = `
       INSERT INTO pools (
         pool_name,
@@ -153,13 +161,16 @@ app.post("/api/pools", async (req, res) => {
         pool_website,
         pool_telegram,
         pool_x,
-        contract_address
+        contract_address,
+        pool_token_account
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
-              $9, $10, $11, $12, $13, $14, $15, $16)
+              $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING *;
     `;
 
+    // 4) If `pool_token_account` is missing, we pass null to store it as NULL
+    //    (or you can just pass it directly if you prefer).
     const result = await db.query(insertPoolQuery, [
       pool_name,
       pool_image_gif,
@@ -177,6 +188,7 @@ app.post("/api/pools", async (req, res) => {
       pool_telegram,
       pool_x,
       contract_address,
+      pool_token_account || null,
     ]);
 
     return res.json({ success: true, pool: result.rows[0] });
