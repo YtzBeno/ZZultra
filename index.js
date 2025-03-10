@@ -4,10 +4,12 @@ const cors = require("cors");
 const { Pool } = require("pg");
 const { ethers } = require("ethers");
 const { Connection } = require("@solana/web3.js");
+const uploadRoutes = require("./uploadRoutes");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use("/api", uploadRoutes);
 
 // Postgres pool
 const db = new Pool({
