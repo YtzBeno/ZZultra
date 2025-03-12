@@ -29,7 +29,9 @@ app.get("/", (req, res) => {
   res.send("Hello from the Pool API!");
 });
 
-// Example verify function for EVM
+// -----------------------------------------------------------------------
+// Helper: Verify EVM tx on Sepolia
+// -----------------------------------------------------------------------
 async function verifyOnSepolia(txHash) {
   try {
     const receipt = await sepoliaProvider.getTransactionReceipt(txHash);
@@ -41,26 +43,29 @@ async function verifyOnSepolia(txHash) {
   }
 }
 
-// Example verify for Solana
+// -----------------------------------------------------------------------
+// Helper: Verify Solana tx
+// -----------------------------------------------------------------------
 async function verifyOnSolana(sig) {
   try {
     const tx = await solConnection.getParsedTransaction(sig, {
       maxSupportedTransactionVersion: 0,
     });
-    // If we got a valid transaction object, we can do further checks
-    return !!tx; // if not null or undefined
+    return !!tx; // if not null => we consider it verified
   } catch (err) {
     console.error("Error verifying Solana tx:", err);
     return false;
   }
 }
 
+// -----------------------------------------------------------------------
+// POST /api/transactions => insert a new transaction
+// -----------------------------------------------------------------------
 app.post("/api/transactions", async (req, res) => {
   try {
     const { chain, txHashOrSig, poolId, userAddress, amount, txType } =
       req.body;
 
-    // quick checks
     if (!chain || !txHashOrSig || !poolId || !userAddress || !txType) {
       return res.status(400).json({ error: "Missing required fields" });
     }
@@ -100,22 +105,51 @@ app.post("/api/transactions", async (req, res) => {
   }
 });
 
+// -----------------------------------------------------------------------
+// [NEW] GET /api/pools/:poolId/transactions => list transactions for that pool
+// -----------------------------------------------------------------------
+app.get("/api/pools/:poolId/transactions", async (req, res) => {
+  try {
+    const { poolId } = req.params;
+
+    // Query the transactions table for this pool, order by newest first
+    // Make sure your 'transactions' table has a 'created_on' or similar timestamp
+    const sql = `
+      SELECT 
+        id,
+        pool_id,
+        transaction_type,
+        amount,
+        user_address,
+        tx_hash_or_sig,
+        created_on
+      FROM transactions
+      WHERE pool_id = $1
+      ORDER BY created_on DESC
+      LIMIT 50;
+    `;
+    const result = await db.query(sql, [poolId]);
+
+    res.json({ success: true, data: result.rows });
+  } catch (err) {
+    console.error("Error listing transactions:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// -----------------------------------------------------------------------
+// Start the server
+// -----------------------------------------------------------------------
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`Pool API listening on port ${PORT}`);
 });
 
-/**************************************
- * POOL ROUTES
- **************************************/
-
-// POST /api/pools => create a new pool
-// index.js (or wherever you define your pool routes)
-
-// ...
+// -----------------------------------------------------------------------
+// POOL ROUTES
+// -----------------------------------------------------------------------
 app.post("/api/pools", async (req, res) => {
   try {
-    // 1) Destructure all fields, including optional `pool_token_account`
     const {
       pool_name,
       pool_image_gif,
@@ -133,19 +167,15 @@ app.post("/api/pools", async (req, res) => {
       pool_telegram,
       pool_x,
       contract_address,
-      // NEW optional field:
       pool_token_account,
     } = req.body;
 
-    // 2) Minimal check
     if (!pool_name || !chain) {
       return res
         .status(400)
         .json({ error: "Missing required fields (pool_name, chain)." });
     }
 
-    // 3) Insert query: includes "pool_token_account"
-    // We append it as the 17th column. Make sure your "pools" table has this column.
     const insertPoolQuery = `
       INSERT INTO pools (
         pool_name,
@@ -170,9 +200,6 @@ app.post("/api/pools", async (req, res) => {
               $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING *;
     `;
-
-    // 4) If `pool_token_account` is missing, we pass null to store it as NULL
-    //    (or you can just pass it directly if you prefer).
     const result = await db.query(insertPoolQuery, [
       pool_name,
       pool_image_gif,
@@ -200,7 +227,6 @@ app.post("/api/pools", async (req, res) => {
   }
 });
 
-// GET /api/pools => list all pools
 app.get("/api/pools", async (req, res) => {
   try {
     const allPools = await db.query("SELECT * FROM pools ORDER BY id DESC");
@@ -211,7 +237,6 @@ app.get("/api/pools", async (req, res) => {
   }
 });
 
-// GET /api/pools/:id => get pool by ID
 app.get("/api/pools/:id", async (req, res) => {
   try {
     const { id } = req.params;
