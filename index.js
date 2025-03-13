@@ -77,6 +77,9 @@ app.post("/api/transactions", async (req, res) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
+    // Normalize txType to lowercase
+    const txTypeLower = txType.toLowerCase();
+
     // Verify transaction on-chain
     let verified = false;
     if (chain === "Sepolia") {
@@ -91,7 +94,7 @@ app.post("/api/transactions", async (req, res) => {
         .json({ error: "Could not verify transaction on-chain" });
     }
 
-    // Start a transaction to ensure atomicity
+    // Start DB transaction
     await db.query("BEGIN");
 
     // Insert transaction
@@ -102,27 +105,29 @@ app.post("/api/transactions", async (req, res) => {
     `;
     const transactionResult = await db.query(insertTransactionQuery, [
       poolId,
-      txType,
+      txTypeLower,
       amount,
       userAddress,
       txHashOrSig,
     ]);
 
-    // Update pools table: current_pool_balance & active_entries
     const amountNumber = parseFloat(amount);
 
+    // Update pools table safely (handles NULL cases)
     const poolUpdateQuery = `
       UPDATE pools
-      SET current_pool_balance = current_pool_balance ${
-        txType === "Deposit" ? "+" : "-"
+      SET current_pool_balance = COALESCE(current_pool_balance, 0) ${
+        txTypeLower === "deposit" ? "+" : "-"
       } $1,
-          active_entries = active_entries ${txType === "Deposit" ? "+" : "-"} 1
+          active_entries = GREATEST(COALESCE(active_entries, 0) ${
+            txTypeLower === "deposit" ? "+" : "-"
+          } 1, 0)
       WHERE id = $2;
     `;
     await db.query(poolUpdateQuery, [amountNumber, poolId]);
 
-    // Update or insert into pool_participants
-    if (txType === "Deposit") {
+    // Participant updates
+    if (txTypeLower === "deposit") {
       const participantInsertQuery = `
         INSERT INTO pool_participants (pool_id, user_address, amount)
         VALUES ($1, $2, $3)
@@ -134,7 +139,7 @@ app.post("/api/transactions", async (req, res) => {
         userAddress,
         amountNumber,
       ]);
-    } else if (txType === "Withdraw") {
+    } else if (txTypeLower === "withdraw") {
       const participantUpdateQuery = `
         UPDATE pool_participants
         SET amount = amount - $1
@@ -146,17 +151,14 @@ app.post("/api/transactions", async (req, res) => {
         userAddress,
       ]);
 
-      // Optional: Remove entry if amount is zero or negative
+      // Remove participant if balance drops to zero or negative
       await db.query(
-        `
-        DELETE FROM pool_participants
-        WHERE pool_id = $1 AND user_address = $2 AND amount <= 0;
-      `,
+        `DELETE FROM pool_participants WHERE pool_id = $1 AND user_address = $2 AND amount <= 0;`,
         [poolId, userAddress]
       );
     }
 
-    // Commit the transaction
+    // Commit DB transaction
     await db.query("COMMIT");
 
     res.json({ success: true, transaction: transactionResult.rows[0] });
