@@ -232,12 +232,11 @@ app.post("/api/pools", async (req, res) => {
       pool_x,
       contract_address,
       pool_token_account,
+      current_pool_balance, // <-- You must add this line
     } = req.body;
 
     if (!pool_name || !chain) {
-      return res
-        .status(400)
-        .json({ error: "Missing required fields (pool_name, chain)." });
+      return res.status(400).json({ error: "Missing required fields (pool_name, chain)." });
     }
 
     const insertPoolQuery = `
@@ -258,12 +257,14 @@ app.post("/api/pools", async (req, res) => {
         pool_telegram,
         pool_x,
         contract_address,
-        pool_token_account
+        pool_token_account,
+        current_pool_balance  -- <-- Insert this field explicitly
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
-              $9, $10, $11, $12, $13, $14, $15, $16, $17)
+              $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       RETURNING *;
     `;
+
     const result = await db.query(insertPoolQuery, [
       pool_name,
       pool_image_gif,
@@ -282,6 +283,7 @@ app.post("/api/pools", async (req, res) => {
       pool_x,
       contract_address,
       pool_token_account || null,
+      parseFloat(current_pool_balance), // <-- parse to float for numeric column
     ]);
 
     return res.json({ success: true, pool: result.rows[0] });
