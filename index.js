@@ -236,7 +236,9 @@ app.post("/api/pools", async (req, res) => {
     } = req.body;
 
     if (!pool_name || !chain) {
-      return res.status(400).json({ error: "Missing required fields (pool_name, chain)." });
+      return res
+        .status(400)
+        .json({ error: "Missing required fields (pool_name, chain)." });
     }
 
     const insertPoolQuery = `
@@ -317,6 +319,67 @@ app.get("/api/pools/:id", async (req, res) => {
     res.json(poolResult.rows[0]);
   } catch (error) {
     console.error("Error in GET /api/pools/:id:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Dashboard endpoint to get pools created and deposited by wallet
+app.get("/api/dashboard/:walletAddress", async (req, res) => {
+  try {
+    const { walletAddress } = req.params;
+
+    // Pools created by the user
+    const poolsCreatedQuery = `
+      SELECT 
+        id,
+        pool_name,
+        chain,
+        current_pool_balance,
+        created_on,
+        'Pool Created' AS type
+      FROM pools
+      WHERE owner_address = $1
+    `;
+
+    const poolsCreatedResult = await db.query(poolsCreatedQuery, [
+      walletAddress,
+    ]);
+
+    // Pools deposited into by the user
+    const poolsDepositedQuery = `
+      SELECT DISTINCT ON (p.id)
+        p.id,
+        p.pool_name,
+        p.chain,
+        p.current_pool_balance,
+        pp.amount as deposited_amount
+      FROM pools p
+      JOIN pool_participants pp ON p.id = pp.pool_id
+      WHERE pp.user_address = $1;
+    `;
+
+    const [createdResult, depositedResult] = await Promise.all([
+      db.query(poolsCreatedQuery),
+      db.query(poolsDepositedQuery, [walletAddress]),
+    ]);
+
+    // Mark each type accordingly
+    const createdPools = poolsCreatedQuery.rows.map((pool) => ({
+      type: "Pool Created",
+      ...pool,
+    }));
+
+    const depositedPools = poolsDepositedQuery.rows.map((pool) => ({
+      type: "Deposit",
+      ...pool,
+    }));
+
+    // Combine results
+    const combinedPools = [...createdPools, ...depositedPools];
+
+    res.json({ success: true, pools: combinedPools });
+  } catch (error) {
+    console.error("Error fetching dashboard data:", error);
     res.status(500).json({ error: "Server error" });
   }
 });
