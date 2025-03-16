@@ -323,7 +323,6 @@ app.get("/api/pools/:id", async (req, res) => {
   }
 });
 
-// Dashboard endpoint to get pools created and deposited by wallet
 app.get("/api/dashboard/:walletAddress", async (req, res) => {
   try {
     const { walletAddress } = req.params;
@@ -336,8 +335,7 @@ app.get("/api/dashboard/:walletAddress", async (req, res) => {
         current_pool_balance,
         created_on
       FROM pools
-      WHERE owner_address = $1
-      ORDER BY created_on DESC;
+      WHERE owner_address = $1;
     `;
 
     const poolsDepositedQuery = `
@@ -347,11 +345,12 @@ app.get("/api/dashboard/:walletAddress", async (req, res) => {
         p.chain,
         p.current_pool_balance,
         pp.amount AS deposited_amount,
-        pp.created_on
+        t.created_on
       FROM pools p
       JOIN pool_participants pp ON p.id = pp.pool_id
-      WHERE pp.user_address = $1
-      ORDER BY pp.created_on DESC;
+      JOIN transactions t ON t.pool_id = p.id AND t.user_address = pp.user_address
+      WHERE pp.user_address = $1 AND t.transaction_type = 'deposit'
+      ORDER BY t.created_on DESC;
     `;
 
     const [createdResult, depositedResult] = await Promise.all([
@@ -369,7 +368,6 @@ app.get("/api/dashboard/:walletAddress", async (req, res) => {
       ...pool,
     }));
 
-    // Combine and sort pools by date, newest on top
     const combinedPools = [...createdPools, ...depositedPools].sort(
       (a, b) => new Date(b.created_on) - new Date(a.created_on)
     );
