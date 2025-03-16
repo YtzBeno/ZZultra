@@ -333,9 +333,11 @@ app.get("/api/dashboard/:walletAddress", async (req, res) => {
         id,
         pool_name,
         chain,
-        current_pool_balance
+        current_pool_balance,
+        created_on
       FROM pools
-      WHERE owner_address = $1;
+      WHERE owner_address = $1
+      ORDER BY created_on DESC;
     `;
 
     const poolsDepositedQuery = `
@@ -344,10 +346,12 @@ app.get("/api/dashboard/:walletAddress", async (req, res) => {
         p.pool_name,
         p.chain,
         p.current_pool_balance,
-        pp.amount AS deposited_amount
+        pp.amount AS deposited_amount,
+        pp.created_on
       FROM pools p
       JOIN pool_participants pp ON p.id = pp.pool_id
-      WHERE pp.user_address = $1;
+      WHERE pp.user_address = $1
+      ORDER BY pp.created_on DESC;
     `;
 
     const [createdResult, depositedResult] = await Promise.all([
@@ -365,7 +369,10 @@ app.get("/api/dashboard/:walletAddress", async (req, res) => {
       ...pool,
     }));
 
-    const combinedPools = [...createdPools, ...depositedPools];
+    // Combine and sort pools by date, newest on top
+    const combinedPools = [...createdPools, ...depositedPools].sort(
+      (a, b) => new Date(b.created_on) - new Date(a.created_on)
+    );
 
     res.json({ success: true, pools: combinedPools });
   } catch (err) {
