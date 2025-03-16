@@ -327,6 +327,7 @@ app.get("/api/dashboard/:walletAddress", async (req, res) => {
   try {
     const { walletAddress } = req.params;
 
+    // Pools created by the user
     const poolsCreatedQuery = `
       SELECT 
         id,
@@ -335,22 +336,22 @@ app.get("/api/dashboard/:walletAddress", async (req, res) => {
         current_pool_balance,
         created_on
       FROM pools
-      WHERE owner_address = $1;
+      WHERE owner_address = $1
     `;
 
+    // Deposits made by the user (from transactions table)
     const poolsDepositedQuery = `
       SELECT DISTINCT ON (p.id)
         p.id,
         p.pool_name,
         p.chain,
         p.current_pool_balance,
-        pp.amount AS deposited_amount,
+        t.amount AS deposited_amount,
         t.created_on
       FROM pools p
-      JOIN pool_participants pp ON p.id = pp.pool_id
-      JOIN transactions t ON t.pool_id = p.id AND t.user_address = pp.user_address
-      WHERE pp.user_address = $1 AND t.transaction_type = 'deposit'
-      ORDER BY t.created_on DESC;
+      JOIN transactions t ON t.pool_id = p.id
+      WHERE t.user_address = $1 AND t.transaction_type = 'deposit'
+      ORDER BY p.id, t.created_on DESC
     `;
 
     const [createdResult, depositedResult] = await Promise.all([
