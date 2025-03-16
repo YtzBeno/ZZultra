@@ -328,22 +328,20 @@ app.get("/api/dashboard/:walletAddress", async (req, res) => {
   try {
     const { walletAddress } = req.params;
 
-    // Pools created by the user
+    // Pools created by the user (with initial_value)
     const poolsCreatedQuery = `
       SELECT 
         id,
         pool_name,
         chain,
         current_pool_balance,
-        created_on,
-        'Pool Created' AS type
+        initial_value
       FROM pools
       WHERE owner_address = $1
+      ORDER BY created_on DESC;
     `;
 
-    const poolsCreatedResult = await db.query(poolsCreatedQuery, [
-      walletAddress,
-    ]);
+    const createdResult = await db.query(poolsCreatedQuery, [walletAddress]);
 
     // Pools deposited into by the user
     const poolsDepositedQuery = `
@@ -355,21 +353,21 @@ app.get("/api/dashboard/:walletAddress", async (req, res) => {
         pp.amount as deposited_amount
       FROM pools p
       JOIN pool_participants pp ON p.id = pp.pool_id
-      WHERE pp.user_address = $1;
+      WHERE pp.user_address = $1
+      ORDER BY p.id;
     `;
 
-    const [createdResult, depositedResult] = await Promise.all([
-      db.query(poolsCreatedQuery),
-      db.query(poolsDepositedQuery, [walletAddress]),
+    const depositedResult = await db.query(poolsDepositedQuery, [
+      walletAddress,
     ]);
 
-    // Mark each type accordingly
-    const createdPools = poolsCreatedQuery.rows.map((pool) => ({
+    // Combine results with clear types
+    const createdPools = poolsCreatedResult.rows.map((pool) => ({
       type: "Pool Created",
       ...pool,
     }));
 
-    const depositedPools = poolsDepositedQuery.rows.map((pool) => ({
+    const depositedPools = depositedResult.rows.map((pool) => ({
       type: "Deposit",
       ...pool,
     }));
@@ -378,8 +376,8 @@ app.get("/api/dashboard/:walletAddress", async (req, res) => {
     const combinedPools = [...createdPools, ...depositedPools];
 
     res.json({ success: true, pools: combinedPools });
-  } catch (error) {
-    console.error("Error fetching dashboard data:", error);
+  } catch (err) {
+    console.error("Error listing dashboard pools:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
