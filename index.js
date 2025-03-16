@@ -328,16 +328,14 @@ app.get("/api/dashboard/:walletAddress", async (req, res) => {
   try {
     const { walletAddress } = req.params;
 
-    // Pools created by the user (with initial_value included)
     const poolsCreatedQuery = `
       SELECT 
         id,
         pool_name,
         chain,
-        current_pool_balance,
-        initial_value
+        current_pool_balance
       FROM pools
-      WHERE owner_address = $1
+      WHERE owner_address = $1;
     `;
 
     const poolsDepositedQuery = `
@@ -346,11 +344,10 @@ app.get("/api/dashboard/:walletAddress", async (req, res) => {
         p.pool_name,
         p.chain,
         p.current_pool_balance,
-        p.initial_value,
-        pp.amount as deposited_amount
+        pp.amount AS deposited_amount
       FROM pools p
       JOIN pool_participants pp ON p.id = pp.pool_id
-      WHERE pp.user_address = $1
+      WHERE pp.user_address = $1;
     `;
 
     const [createdResult, depositedResult] = await Promise.all([
@@ -371,8 +368,8 @@ app.get("/api/dashboard/:walletAddress", async (req, res) => {
     const combinedPools = [...createdPools, ...depositedPools];
 
     res.json({ success: true, pools: combinedPools });
-  } catch (error) {
-    console.error("Error fetching dashboard data:", error);
+  } catch (err) {
+    console.error("Error fetching dashboard data:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
