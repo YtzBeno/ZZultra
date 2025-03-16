@@ -328,7 +328,7 @@ app.get("/api/dashboard/:walletAddress", async (req, res) => {
   try {
     const { walletAddress } = req.params;
 
-    // Pools created by the user (with initial_value)
+    // Pools created by the user (with initial_value included)
     const poolsCreatedQuery = `
       SELECT 
         id,
@@ -338,31 +338,27 @@ app.get("/api/dashboard/:walletAddress", async (req, res) => {
         initial_value
       FROM pools
       WHERE owner_address = $1
-      ORDER BY created_on DESC;
     `;
 
-    const createdResult = await db.query(poolsCreatedQuery, [walletAddress]);
-
-    // Pools deposited into by the user
     const poolsDepositedQuery = `
       SELECT DISTINCT ON (p.id)
         p.id,
         p.pool_name,
         p.chain,
         p.current_pool_balance,
+        p.initial_value,
         pp.amount as deposited_amount
       FROM pools p
       JOIN pool_participants pp ON p.id = pp.pool_id
       WHERE pp.user_address = $1
-      ORDER BY p.id;
     `;
 
-    const depositedResult = await db.query(poolsDepositedQuery, [
-      walletAddress,
+    const [createdResult, depositedResult] = await Promise.all([
+      db.query(poolsCreatedQuery, [walletAddress]),
+      db.query(poolsDepositedQuery, [walletAddress]),
     ]);
 
-    // Combine results with clear types
-    const createdPools = poolsCreatedResult.rows.map((pool) => ({
+    const createdPools = createdResult.rows.map((pool) => ({
       type: "Pool Created",
       ...pool,
     }));
@@ -372,12 +368,11 @@ app.get("/api/dashboard/:walletAddress", async (req, res) => {
       ...pool,
     }));
 
-    // Combine results
     const combinedPools = [...createdPools, ...depositedPools];
 
     res.json({ success: true, pools: combinedPools });
-  } catch (err) {
-    console.error("Error listing dashboard pools:", err);
+  } catch (error) {
+    console.error("Error fetching dashboard data:", error);
     res.status(500).json({ error: "Server error" });
   }
 });
