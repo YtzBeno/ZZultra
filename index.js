@@ -232,7 +232,15 @@ app.post("/api/pools", async (req, res) => {
       pool_x,
       contract_address,
       pool_token_account,
-      current_pool_balance, // <-- You must add this line
+      current_pool_balance,
+
+      // NEW:
+      yield_value,
+      yield_unit,
+      deposit_limit,
+      withdraw_fee,
+      withdraw_lock,
+      withdraw_lock_unit,
     } = req.body;
 
     if (!pool_name || !chain) {
@@ -260,10 +268,16 @@ app.post("/api/pools", async (req, res) => {
         pool_x,
         contract_address,
         pool_token_account,
-        current_pool_balance  -- <-- Insert this field explicitly
+        current_pool_balance,
+        yield_value,
+        yield_unit,
+        deposit_limit,
+        withdraw_fee,
+        withdraw_lock,
+        withdraw_lock_unit
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
-              $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+              $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
       RETURNING *;
     `;
 
@@ -286,6 +300,12 @@ app.post("/api/pools", async (req, res) => {
       contract_address,
       pool_token_account || null,
       parseFloat(current_pool_balance), // <-- parse to float for numeric column
+      parseFloat(yield_value),
+      yield_unit, // text
+      parseFloat(deposit_limit),
+      parseFloat(withdraw_fee),
+      parseFloat(withdraw_lock),
+      withdraw_lock_unit, // text
     ]);
 
     return res.json({ success: true, pool: result.rows[0] });
